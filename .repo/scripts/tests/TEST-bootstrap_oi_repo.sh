@@ -107,8 +107,8 @@ esac' > "$Test_Root/bin/gh"
 #----------------------------------------------------------------------#
 bootstrap() {
     zsh "$Scripts/bootstrap_oi_repo.sh" --path "$Demo" --github test/oi-demo \
-        --allow-software-human-key --human-key "$Test_Root/keys/human.pub" \
-        --agent-key "$Test_Root/keys/agent.pub" \
+        --allow-software-human-key --allow-software-device-keys \
+        --human-key "$Test_Root/keys/human.pub" --agent-key "$Test_Root/keys/agent.pub" \
         --device seshat="$Test_Root/keys/seshat.pub" \
         --device athena="$Test_Root/keys/athena.pub" "$@"
 }
@@ -172,6 +172,13 @@ run_Tests() {
         --human-key "$Test_Root/keys/human.pub" --agent-key "$Test_Root/keys/agent.pub" 2>&1) && Status=0 || Status=$?
     check "a software human key is refused without --allow-software-human-key" \
         "$( (( Status == 2 )) && [[ "$Output" == *"not a Secure Enclave"* ]] && print true || print false)" "$Output"
+
+    Output=$(zsh "$Scripts/bootstrap_oi_repo.sh" --path "$Demo" --no-github --dry-run \
+        --allow-software-human-key --human-key "$Test_Root/keys/human.pub" \
+        --agent-key "$Test_Root/keys/agent.pub" \
+        --device athena="$Test_Root/keys/athena.pub" 2>&1) && Status=0 || Status=$?
+    check "a software device key is refused (it would become a main signer)" \
+        "$( (( Status == 2 )) && [[ "$Output" == *"device key for athena is ssh-ed25519"* ]] && print true || print false)" "$Output"
 
     Output=$(bootstrap 2>&1) && Status=0 || Status=$?
     check "bootstrap succeeds" "$( (( Status == 0 )) && print true || print false)" "$Output"

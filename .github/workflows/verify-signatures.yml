@@ -29,5 +29,13 @@ jobs:
       - name: Run verifier regression tests
         run: zsh .repo/scripts/tests/TEST-verify_commit_signatures.sh
 
-      - name: Verify every commit against the Open Integrity trust chain
-        run: zsh .repo/scripts/verify_commit_signatures.sh
+      # On main, and on staging/* branches holding the commit about to be
+      # fast-forwarded onto main, the checked-out history is the protected
+      # chain. Everywhere else, main's rules apply to origin/main.
+      - name: Verify every commit and tag against the Open Integrity trust chain
+        run: |
+          if [[ "$GITHUB_REF" == refs/heads/main || "$GITHUB_REF" == refs/heads/staging/* ]]; then
+            zsh .repo/scripts/verify_commit_signatures.sh --protected HEAD
+          else
+            zsh .repo/scripts/verify_commit_signatures.sh --protected origin/main
+          fi

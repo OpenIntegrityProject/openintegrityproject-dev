@@ -54,7 +54,7 @@ This key also certifies future commits' integrity and origin. Other keys can be 
 typeset -g Repo_Path="" GitHub_Repo="OpenIntegrityProject/oi-demo"
 typeset -g Human_Key="" Human_Principal="" Agent_Key="" Agent_Principal=""
 typeset -g Cloud_Key="$Default_Cloud_Key" Cloud_Principal="@claude-code-web"
-typeset -g Dry_Run=false Use_GitHub=true Allow_Software_Human_Key=false
+typeset -g Dry_Run=false Use_GitHub=true Allow_Software_Human_Key=false Allow_Software_Device_Keys=false
 typeset -g Create_Agent_Key=false
 typeset -ga Device_Specs
 
@@ -85,6 +85,7 @@ Options:
   --cloud-key '<key>'        Claude Code on the web key (default: observed key)
   --no-github                Skip creating the GitHub repository
   --allow-software-human-key Accept a non-Secure-Enclave human key (testing)
+  --allow-software-device-keys Accept non-Secure-Enclave device keys (testing)
   --dry-run                  Print what would happen; change nothing
 Examples:
   $Script_Name --dry-run
@@ -287,6 +288,9 @@ check_Inputs() {
         [[ "$Spec" == *=* ]] || die "--device expects <host>=<file.pub>, got '$Spec'" $Exit_Status_Usage
         Device_File="${${Spec#*=}/#\~/$HOME}"
         key_Text "$Device_File" >/dev/null || die "device key '$Device_File' is not a public key" $Exit_Status_IO
+        if [[ "$(key_Type "$Device_File")" != sk-ecdsa-sha2-nistp256@openssh.com && "$Allow_Software_Device_Keys" == false ]]; then
+            die "device key for ${Spec%%=*} is $(key_Type "$Device_File"), not a Secure Enclave (sk-ecdsa) key; it would become a main and tag signer (override with --allow-software-device-keys)" $Exit_Status_Usage
+        fi
     done
 
     [[ -n "$Agent_Principal" ]] || Agent_Principal="@claude-local/$Host"
@@ -591,6 +595,7 @@ parse_Parameters() {
             --cloud-key) (( $# > 1 )) || show_Usage; Cloud_Key="$2"; shift 2 ;;
             --no-github) Use_GitHub=false; shift ;;
             --allow-software-human-key) Allow_Software_Human_Key=true; shift ;;
+            --allow-software-device-keys) Allow_Software_Device_Keys=true; shift ;;
             --dry-run) Dry_Run=true; shift ;;
             -h|--help) show_Usage ;;
             *) print -u2 "Error: Unknown argument '$1'"; show_Usage ;;

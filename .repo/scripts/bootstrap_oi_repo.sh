@@ -232,24 +232,50 @@ append_Signers() {
 # Function: create_Agent_Key
 #----------------------------------------------------------------------#
 # Description:
-#   Creates a non-exportable Secure Enclave key with no Touch ID for the
-#   local Claude Code agent, and saves its public key from the SSH agent.
-#   macOS only.
+#   Creates (or reuses) a non-exportable Secure Enclave identity with no
+#   Touch ID for the local Claude Code agent, exports its SSH key handle
+#   ("stub") with ssh-keygen -K, saves the stub in ~/.ssh and the public
+#   key at the given path, and loads the stub into the SSH agent with
+#   ssh-add -S. macOS only.
 # Parameters:
-#   $1 - Path to write the public key
+#   $1 - Path to write the public key; its base name is the identity label
 # Returns:
 #   Exit_Status_Success, or exits on failure
 #----------------------------------------------------------------------#
 create_Agent_Key() {
-    typeset Pub_File="$1" Label="${1:t:r}"
+    typeset Pub_File="$1" Label="${1:t:r}" Stub_File Work_Dir
+    typeset -r Provider="/usr/lib/ssh-keychain.dylib"
+    Stub_File="$HOME/.ssh/$Label"
     [[ "$OSTYPE" == darwin* ]] || die "--create-agent-key needs macOS"
     command -v sc_auth >/dev/null || die "sc_auth not found"
-    say "Creating local agent key '$Label' in the Secure Enclave (no Touch ID)"
-    run sc_auth create-ctk-identity -l "$Label" -k p-256-ne -t none
+    [[ -r "$Provider" ]] || die "$Provider not found"
+
+    if sc_auth list-ctk-identities 2>/dev/null | grep -q -- " $Label "; then
+        say "Reusing Secure Enclave identity '$Label'"
+    else
+        say "Creating local agent key '$Label' in the Secure Enclave (no Touch ID)"
+        run sc_auth create-ctk-identity -l "$Label" -k p-256-ne -t none
+    fi
+
+    say "Exporting its key handle (press Return at the PIN prompt; Touch ID may prompt)"
+    print -- "    \$ ssh-keygen -K -w $Provider -N ''   # in a temporary directory"
+    print -- "    (save $Stub_File and $Pub_File)"
+    print -- "    \$ ssh-add -S $Provider $Stub_File"
     [[ "$Dry_Run" == true ]] && return $Exit_Status_Success
-    ssh-add -L | grep -- " $Label\$" > "$Pub_File" \
-        || die "new key '$Label' not visible in ssh-add -L; save its public key to $Pub_File and re-run with --agent-key"
-    say "Saved $Pub_File ($(key_Fingerprint "$Pub_File"))"
+
+    Work_Dir=$(mktemp -d)
+    if ! (cd "$Work_Dir" && ssh-keygen -K -w "$Provider" -N "" >/dev/null) \
+        || [[ ! -s "$Work_Dir/id_ecdsa_sk_rk_$Label" || ! -s "$Work_Dir/id_ecdsa_sk_rk_$Label.pub" ]]; then
+        rm -rf -- "$Work_Dir"
+        die "could not export the key handle for '$Label' with ssh-keygen -K"
+    fi
+    mkdir -p "${Pub_File:h}"
+    install -m 600 "$Work_Dir/id_ecdsa_sk_rk_$Label" "$Stub_File"
+    install -m 644 "$Work_Dir/id_ecdsa_sk_rk_$Label.pub" "$Pub_File.tmp"
+    mv "$Pub_File.tmp" "$Pub_File"
+    rm -rf -- "$Work_Dir"
+    ssh-add -S "$Provider" "$Stub_File" || die "ssh-add could not load $Stub_File"
+    say "Saved $Pub_File ($(key_Fingerprint "$Pub_File")); stub $Stub_File loaded into the SSH agent"
 }
 
 #----------------------------------------------------------------------#
@@ -393,9 +419,13 @@ step_Devices() {
 step_Agent_Signer() {
     step_Done agent-signer && { say "Local agent key already approved"; return $Exit_Status_Success; }
     say "Approve the local Claude Code key (Touch ID)"
-    append_Signers allowed_commit_signers "$(signers_Line "$Agent_Principal" \
-        "$( [[ -r "$Agent_Key" ]] && key_Text "$Agent_Key" || print '<agent key>')" \
-        "Agent, Claude Code on $(hostname -s); Secure Enclave key without Touch ID; working branches only")"
+    if [[ -s "$Agent_Key" ]]; then
+        append_Signers allowed_commit_signers "$(signers_Line "$Agent_Principal" "$(key_Text "$Agent_Key")" \
+            "Agent, Claude Code on $(hostname -s); Secure Enclave key without Touch ID; working branches only")"
+    else
+        append_Signers allowed_commit_signers "# Agent, Claude Code on $(hostname -s) (key created in the real run)
+$Agent_Principal namespaces=\"git\" <agent key>"
+    fi
     commit_Step agent-signer "Authorize $Agent_Principal (local Claude Code) as commit signer" \
         "$Verification_Dir/allowed_commit_signers"
 }

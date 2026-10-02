@@ -267,31 +267,120 @@ section_Git_Config() {
 # Function: section_GitHub_Keys
 #----------------------------------------------------------------------#
 # Description:
-#   Lists the public SSH signing keys registered on a GitHub account,
-#   via the unauthenticated public API
+#   Lists the public SSH signing and authentication keys registered on
+#   a GitHub account, as fetched by fetch_GitHub_Keys
 # Parameters:
 #   $1 - GitHub username
+#   $2 - Signing keys JSON (or fetch error text)
+#   $3 - Authentication keys, one per line (or fetch error text)
 # Returns:
 #   Exit_Status_Success always
 #----------------------------------------------------------------------#
 section_GitHub_Keys() {
-    typeset User="$1" Json
-    typeset Auth_Keys
+    typeset User="$1" Signing_Json="$2" Auth_Keys="$3"
     print "## GitHub signing keys for @$User"
     print
     print '```'
-    Json=$(curl -fsS "https://api.github.com/users/$User/ssh_signing_keys" 2>&1) || true
-    print -r -- "$Json"
+    print -r -- "$Signing_Json"
     print '```'
     print
     print "## GitHub authentication keys for @$User"
     print
     print '```'
-    Auth_Keys=$(curl -fsS "https://github.com/$User.keys" 2>&1) || true
     print -r -- "$Auth_Keys"
     print
     print -r -- "$Auth_Keys" | { grep -E '^(ssh-|ecdsa-|sk-)' || true } | emit_Key_Fingerprints
     print '```'
+    print
+    return $Exit_Status_Success
+}
+
+#----------------------------------------------------------------------#
+# Function: classify_Key_Type
+#----------------------------------------------------------------------#
+# Description:
+#   Describes where a key of the given type can live. A P-256 key is
+#   only *possibly* in the Secure Enclave: the type alone cannot prove
+#   hardware storage.
+# Parameters:
+#   $1 - OpenSSH key type
+# Returns:
+#   Prints a short description; Exit_Status_Success always
+#----------------------------------------------------------------------#
+classify_Key_Type() {
+    case "$1" in
+        ecdsa-sha2-nistp256)
+            print "P-256: possibly Secure Enclave (e.g. Secretive), or software" ;;
+        sk-ecdsa-sha2-nistp256@openssh.com)
+            print "P-256 security key: Secure Enclave via ssh-keychain.dylib, or FIDO token" ;;
+        sk-ssh-ed25519@openssh.com)
+            print "Ed25519 FIDO token (not Secure Enclave)" ;;
+        ssh-ed25519)
+            print "Ed25519 software key (cannot be Secure Enclave)" ;;
+        ssh-rsa)
+            print "RSA software key (cannot be Secure Enclave)" ;;
+        *)
+            print "other: $1" ;;
+    esac
+    return $Exit_Status_Success
+}
+
+#----------------------------------------------------------------------#
+# Function: section_Key_Summary
+#----------------------------------------------------------------------#
+# Description:
+#   Cross-references every public key found locally, on GitHub, and in
+#   allowed signers files, showing each key's type, likely storage, and
+#   where it appears
+# Parameters:
+#   $1 - SSH agent public keys (ssh-add -L output)
+#   $2 - Contents of ~/.ssh/*.pub
+#   $3 - GitHub authentication keys
+#   $4 - GitHub signing keys JSON
+#   $5 - Repository allowed_commit_signers contents
+#   $6 - Global allowed signers file contents
+# Returns:
+#   Exit_Status_Success always
+#----------------------------------------------------------------------#
+section_Key_Summary() {
+    typeset -A Key_Sources
+    typeset -a Labels Key_Order match mbegin mend
+    typeset -i Index
+    typeset Key Line Type Fingerprint Row Label
+    typeset -r Key_Pattern='(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ecdsa-sha2-nistp256@openssh\.com|sk-ssh-ed25519@openssh\.com)[[:space:]]+(AAAA[A-Za-z0-9+/=]+)'
+    Labels=(agent "~/.ssh" "GH auth" "GH sign" "repo signers" "global signers")
+
+    for Index in {1..6}; do
+        for Line in "${(@f)${(P)Index}}"; do
+            [[ "$Line" =~ $Key_Pattern ]] || continue
+            Key="$match[1] $match[3]"
+            [[ -n "${Key_Sources[$Key]-}" ]] || Key_Order+=("$Key")
+            [[ "${Key_Sources[$Key]-}" == *"|$Index|"* ]] || Key_Sources[$Key]+="|$Index|"
+        done
+    done
+
+    print "## Key summary"
+    print
+    if (( ${#Key_Order} == 0 )); then
+        print "No public keys found."
+        print
+        return $Exit_Status_Success
+    fi
+    print "| Fingerprint | Type | ${(j: | :)Labels} |"
+    print "|---|---|${(j::)${(@)Labels/*/---|}}"
+    for Key in "${Key_Order[@]}"; do
+        Type="${Key%% *}"
+        Fingerprint=$(print -r -- "$Key" | ssh-keygen -lf - 2>/dev/null | awk '{print $2}') || Fingerprint="?"
+        Row="| \`$Fingerprint\` | $(classify_Key_Type "$Type") |"
+        for Index in {1..6}; do
+            if [[ "${Key_Sources[$Key]}" == *"|$Index|"* ]]; then
+                Row+=" yes |"
+            else
+                Row+=" |"
+            fi
+        done
+        print -r -- "$Row"
+    done
     print
     return $Exit_Status_Success
 }
@@ -364,6 +453,21 @@ section_Sign_Test() {
 #----------------------------------------------------------------------#
 core_Logic() {
     typeset Output_File="$1" GitHub_User="$2" Sign_Test="$3"
+    typeset Agent_Keys="" Pub_Keys="" GitHub_Signing="" GitHub_Auth=""
+    typeset Repo_Signers="" Global_Signers="" Signers_File Pub_File
+
+    # Gather key sources once; every value here is public
+    Agent_Keys=$(ssh-add -L 2>&1) || true
+    for Pub_File in "$HOME"/.ssh/*.pub(N); do
+        Pub_Keys+="$(<"$Pub_File")"$'\n'
+    done
+    GitHub_Signing=$(curl -fsS "https://api.github.com/users/$GitHub_User/ssh_signing_keys" 2>&1) || true
+    GitHub_Auth=$(curl -fsS "https://github.com/$GitHub_User.keys" 2>&1) || true
+    Signers_File="$(git rev-parse --show-toplevel 2>/dev/null)/.repo/config/verification/allowed_commit_signers" || true
+    [[ -r "$Signers_File" ]] && Repo_Signers="$(<"$Signers_File")"
+    Signers_File=$(git config --global --get gpg.ssh.allowedSignersFile 2>/dev/null) || true
+    Signers_File="${Signers_File/#\~/$HOME}"
+    [[ -n "$Signers_File" && -r "$Signers_File" ]] && Global_Signers="$(<"$Signers_File")"
 
     mkdir -p -- "${Output_File:h}" || return $Exit_Status_IO
     {
@@ -372,11 +476,13 @@ core_Logic() {
         print "Generated $(date -u +%Y-%m-%dT%H:%M:%SZ) by \`collect_signing_environment.sh\`."
         print "Contains public information only. Review before committing."
         print
+        section_Key_Summary "$Agent_Keys" "$Pub_Keys" "$GitHub_Auth" \
+            "$GitHub_Signing" "$Repo_Signers" "$Global_Signers"
         section_System
         section_Secure_Enclave
         section_Public_Keys
         section_Git_Config
-        section_GitHub_Keys "$GitHub_User"
+        section_GitHub_Keys "$GitHub_User" "$GitHub_Signing" "$GitHub_Auth"
         [[ "$Sign_Test" == true ]] && section_Sign_Test
         true
     } > "$Output_File" || return $Exit_Status_IO

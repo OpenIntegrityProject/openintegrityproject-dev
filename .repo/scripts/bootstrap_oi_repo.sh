@@ -55,7 +55,7 @@ typeset -g Repo_Path="" GitHub_Repo="OpenIntegrityProject/oi-demo"
 typeset -g Human_Key="" Human_Principal="" Agent_Key="" Agent_Principal=""
 typeset -g Cloud_Key="$Default_Cloud_Key" Cloud_Principal="@claude-code-web"
 typeset -g Dry_Run=false Use_GitHub=true Allow_Software_Human_Key=false Allow_Software_Device_Keys=false
-typeset -g Create_Agent_Key=false
+typeset -g Create_Agent_Key=false Keys_Dir=""
 typeset -ga Device_Specs
 
 #----------------------------------------------------------------------#
@@ -82,6 +82,8 @@ Options:
   --create-agent-key         Create the local Claude Code key in the Secure
                              Enclave (no Touch ID) if --agent-key is absent
   --agent-principal <name>   (default: @claude-local/<host>)
+  --keys-dir <dir>           Where to find or save the agent's public key
+                             (default: the human key's directory)
   --cloud-key '<key>'        Claude Code on the web key (default: observed key)
   --no-github                Skip creating the GitHub repository
   --allow-software-human-key Accept a non-Secure-Enclave human key (testing)
@@ -283,6 +285,8 @@ check_Inputs() {
         die "human key is $(key_Type "$Human_Key"), not a Secure Enclave (sk-ecdsa) key; pass --allow-software-human-key to override" $Exit_Status_Usage
     fi
     [[ -n "$Human_Principal" ]] || Human_Principal="@$GitHub_User/$Host-se"
+    [[ -n "$Keys_Dir" ]] || Keys_Dir="${Human_Key:A:h}"
+    Keys_Dir="${Keys_Dir/#\~/$HOME}"
 
     for Spec in "${Device_Specs[@]}"; do
         [[ "$Spec" == *=* ]] || die "--device expects <host>=<file.pub>, got '$Spec'" $Exit_Status_Usage
@@ -297,8 +301,8 @@ check_Inputs() {
     if [[ -z "$Agent_Key" ]]; then
         # Reuse an existing local agent key (newest first) before creating one
         typeset -a Existing
-        Existing=("$HOME"/.ssh/sign_se_ecdsa-claude-$Host.local-*.pub(N.om))
-        Agent_Key="${Existing[1]-$HOME/.ssh/sign_se_ecdsa-claude-$Host.local-${GitHub_User:l}_$(date +%Y-%m-%d).pub}"
+        Existing=("$Keys_Dir"/sign_se_ecdsa-claude-$Host.local-*.pub(N.om))
+        Agent_Key="${Existing[1]-$Keys_Dir/sign_se_ecdsa-claude-$Host.local-${GitHub_User:l}_$(date +%Y-%m-%d).pub}"
         if [[ ! -r "$Agent_Key" ]]; then
             [[ "$Create_Agent_Key" == true ]] || die "no --agent-key; pass one, or --create-agent-key" $Exit_Status_Usage
             create_Agent_Key "$Agent_Key"
@@ -591,6 +595,7 @@ parse_Parameters() {
             --device) (( $# > 1 )) || show_Usage; Device_Specs+=("$2"); shift 2 ;;
             --agent-key) (( $# > 1 )) || show_Usage; Agent_Key="$2"; shift 2 ;;
             --agent-principal) (( $# > 1 )) || show_Usage; Agent_Principal="$2"; shift 2 ;;
+            --keys-dir) (( $# > 1 )) || show_Usage; Keys_Dir="$2"; shift 2 ;;
             --create-agent-key) Create_Agent_Key=true; shift ;;
             --cloud-key) (( $# > 1 )) || show_Usage; Cloud_Key="$2"; shift 2 ;;
             --no-github) Use_GitHub=false; shift ;;

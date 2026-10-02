@@ -18,7 +18,7 @@ jobs:
     steps:
       # For pull requests, check out the PR head itself: the default
       # refs/pull/N/merge commit is created and left unsigned by GitHub.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha || github.sha }}

@@ -23,7 +23,8 @@ typeset -r Exit_Status_Success=0
 typeset -r Exit_Status_General=1
 
 typeset -r Verifier="${0:A:h:h}/verify_commit_signatures.sh"
-typeset -r Signers_Path=".repo/config/verification/allowed_commit_signers"
+typeset -r Verification_Dir=".repo/config/verification"
+typeset -r Signers_Path="$Verification_Dir/allowed_commit_signers"
 typeset -g Test_Root=""
 typeset -gi Tests_Run=0 Tests_Failed=0
 
@@ -109,7 +110,7 @@ signed_Commit() {
 #----------------------------------------------------------------------#
 new_Repo() {
     typeset Name="$1" Key="$2"
-    git init -q "$Test_Root/$Name"
+    git init -q -b main "$Test_Root/$Name"
     cd "$Test_Root/$Name"
     git config user.name "Test User"
     git config user.email "test@example.com"
@@ -128,11 +129,45 @@ new_Repo() {
 #   Exit_Status_Success
 #----------------------------------------------------------------------#
 add_Signers() {
-    typeset Key="$1" Contents="$2"
-    mkdir -p "${Signers_Path:h}"
-    print -r -- "$Contents" > "$Signers_Path"
-    git add "$Signers_Path"
-    signed_Commit "$Key" "Update signers"
+    add_Trust_File "$1" allowed_commit_signers "$2"
+}
+
+#----------------------------------------------------------------------#
+# Function: add_Trust_File
+#----------------------------------------------------------------------#
+# Description:
+#   Writes a file in the verification directory and commits it, signed
+#   by a key
+# Parameters:
+#   $1 - Signing key name
+#   $2 - File name within the verification directory
+#   $3 - File contents
+# Returns:
+#   Exit_Status_Success
+#----------------------------------------------------------------------#
+add_Trust_File() {
+    typeset Key="$1" File="$Verification_Dir/$2" Contents="$3"
+    mkdir -p "$Verification_Dir"
+    print -r -- "$Contents" > "$File"
+    git add "$File"
+    signed_Commit "$Key" "Update ${File:t}"
+}
+
+#----------------------------------------------------------------------#
+# Function: signed_Tag
+#----------------------------------------------------------------------#
+# Description:
+#   Creates an annotated tag on HEAD, SSH-signed by a throwaway key
+# Parameters:
+#   $1 - Key name
+#   $2 - Tag name
+# Returns:
+#   Exit status of git tag
+#----------------------------------------------------------------------#
+signed_Tag() {
+    git -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen \
+        -c user.signingkey="$Test_Root/keys/$1" \
+        tag -s "$2" -m "Release $2"
 }
 
 #----------------------------------------------------------------------#
@@ -145,13 +180,15 @@ add_Signers() {
 #   $1 - Test name
 #   $2 - Expected exit status
 #   $3 - Optional expected output substring
+#   $@ - Optional further arguments for the verifier
 # Returns:
 #   Exit_Status_Success always (failures are counted)
 #----------------------------------------------------------------------#
 expect() {
     typeset Name="$1" Expected_Status="$2" Expected_Text="${3-}" Output
     typeset -i Status=0
-    Output=$(zsh "$Verifier" 2>&1) || Status=$?
+    shift $(( $# < 3 ? $# : 3 ))
+    Output=$(zsh "$Verifier" "$@" 2>&1) || Status=$?
     (( Tests_Run += 1 ))
     if (( Status == Expected_Status )) && [[ -z "$Expected_Text" || "$Output" == *"$Expected_Text"* ]]; then
         print -- "PASS  $Name"
@@ -175,7 +212,7 @@ expect() {
 #----------------------------------------------------------------------#
 run_Tests() {
     typeset Name
-    for Name in root alice mallory; do make_Key $Name; done
+    for Name in root human alice mallory; do make_Key $Name; done
 
     new_Repo valid root
     add_Signers root "$(signers_Line root)
@@ -203,14 +240,14 @@ $(signers_Line mallory)"
     signed_Commit alice "Before any signers file"
     expect "only the inception key signs before the signers file exists" 4 "is not the inception key"
 
-    git init -q "$Test_Root/nonempty_inception"
+    git init -q -b main "$Test_Root/nonempty_inception"
     cd "$Test_Root/nonempty_inception"
     git config user.name "Test User"; git config user.email "test@example.com"
     print data > file.txt; git add file.txt
     GIT_COMMITTER_NAME="$(key_Fingerprint root)" signed_Commit root "Inception with content"
     expect "non-empty inception fails" 4 "inception commit is not empty"
 
-    git init -q "$Test_Root/wrong_committer"
+    git init -q -b main "$Test_Root/wrong_committer"
     cd "$Test_Root/wrong_committer"
     git config user.name "Test User"; git config user.email "test@example.com"
     GIT_COMMITTER_NAME="$(key_Fingerprint alice)" signed_Commit root "Inception"
@@ -240,6 +277,96 @@ $(signers_Line alice ',valid-before="20200101"')"
     git clone -q --depth 1 "file://$Test_Root/source_for_shallow" "$Test_Root/shallow" 2>/dev/null
     cd "$Test_Root/shallow"
     expect "shallow clone is refused" 3 "shallow clone"
+
+    run_Role_Tests
+    return $Exit_Status_Success
+}
+
+#----------------------------------------------------------------------#
+# Function: new_Role_Repo
+#----------------------------------------------------------------------#
+# Description:
+#   Creates a repository where root and human may sign anything,
+#   alice (standing in for an agent key) may sign commits, and only
+#   human may sign main and tags
+# Parameters:
+#   $1 - Repository name
+# Returns:
+#   Exit_Status_Success
+#----------------------------------------------------------------------#
+new_Role_Repo() {
+    new_Repo "$1" root
+    add_Signers root "$(signers_Line root)
+$(signers_Line human)
+$(signers_Line alice)"
+    add_Trust_File root allowed_main_signers "$(signers_Line human)"
+    add_Trust_File human allowed_tag_signers "$(signers_Line human)"
+}
+
+#----------------------------------------------------------------------#
+# Function: run_Role_Tests
+#----------------------------------------------------------------------#
+# Description:
+#   Tests for main signers, trust-file protection, and tag signers
+# Parameters:
+#   None
+# Returns:
+#   Exit_Status_Success always
+#----------------------------------------------------------------------#
+run_Role_Tests() {
+    new_Role_Repo roles_valid
+    git checkout -q -b feature
+    signed_Commit alice "Agent work on a branch"
+    git checkout -q main
+    git -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen \
+        -c user.signingkey="$Test_Root/keys/human" \
+        merge -q --no-ff -S -m "Merge agent work" feature
+    expect "agent commits on a branch, merged to main by a main signer" 0 "main:@human"
+
+    new_Role_Repo roles_direct
+    signed_Commit alice "Agent commit directly on main"
+    expect "commit signer alone cannot sign on main" 4 "(protected branch)"
+    expect "same commit passes when no branch is protected" 0 "" --protected ''
+
+    new_Role_Repo roles_trust
+    git checkout -q -b feature
+    add_Signers alice "$(signers_Line root)
+$(signers_Line human)
+$(signers_Line alice)
+$(signers_Line mallory)"
+    expect "commit signer cannot change trust files, even off main" 4 "changes $Verification_Dir" --rev feature
+
+    new_Role_Repo roles_merge_trust
+    git checkout -q -b feature
+    add_Signers human "$(signers_Line root)
+$(signers_Line human)"
+    git checkout -q main
+    git -c gpg.format=ssh -c gpg.ssh.program=ssh-keygen \
+        -c user.signingkey="$Test_Root/keys/human" \
+        merge -q --no-ff -S -m "Merge trust change" feature
+    expect "main signer may change trust files" 0
+
+    new_Role_Repo roles_staging
+    git checkout -q -b staging
+    signed_Commit alice "Agent commit about to become main"
+    expect "--protected HEAD applies main rules to a staging branch" 4 "(protected branch)" --protected HEAD
+
+    new_Role_Repo tags_valid
+    signed_Tag human v1.0
+    expect "tag signed by a tag signer" 0 "tag v1.0 OK @human"
+
+    new_Role_Repo tags_wrong_signer
+    signed_Tag alice v1.0
+    expect "tag signed by a non-tag signer fails" 4 "not in"
+
+    new_Role_Repo tags_lightweight
+    git tag v1.0
+    expect "lightweight tag fails" 4 "lightweight tag"
+
+    new_Repo tags_no_file root
+    add_Signers root "$(signers_Line root)"
+    signed_Tag root v1.0
+    expect "tag fails when the tagged commit has no tag signers file" 4 "no $Verification_Dir/allowed_tag_signers"
 
     return $Exit_Status_Success
 }

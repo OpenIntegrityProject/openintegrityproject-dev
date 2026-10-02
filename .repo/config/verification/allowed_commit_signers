@@ -1,0 +1,10 @@
+# Allowed commit signers for OpenIntegrityProject/openintegrityproject-dev
+# Changes to this file must be signed by a currently approved signer.
+
+# Christopher Allen (inception key)
+# SHA256:a61TkTtLFGEYOmdRMbpYGkZwXw2QUrGkAWp3dok8jcw
+@ChristopherA namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICM+YMv6FoadhtecFcrESpq5ZIhxZzYIKky8C+3Xk0Sy
+
+# Claude Code on the web (Anthropic-held key; scope and rotation unconfirmed)
+# SHA256:32dP45eSMmVSt/G/CGvcxl/P+MO3Nwj9xeTh/GSA2wc
+@claude-code-web namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKy87HxSEheG8vEPhSs9u2KZCtVErAQfpmprtUJCZ2w7

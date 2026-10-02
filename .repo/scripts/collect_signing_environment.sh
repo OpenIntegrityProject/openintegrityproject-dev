@@ -276,11 +276,21 @@ section_Git_Config() {
 #----------------------------------------------------------------------#
 section_GitHub_Keys() {
     typeset User="$1" Json
+    typeset Auth_Keys
     print "## GitHub signing keys for @$User"
     print
     print '```'
     Json=$(curl -fsS "https://api.github.com/users/$User/ssh_signing_keys" 2>&1) || true
     print -r -- "$Json"
+    print '```'
+    print
+    print "## GitHub authentication keys for @$User"
+    print
+    print '```'
+    Auth_Keys=$(curl -fsS "https://github.com/$User.keys" 2>&1) || true
+    print -r -- "$Auth_Keys"
+    print
+    print -r -- "$Auth_Keys" | { grep -E '^(ssh-|ecdsa-|sk-)' || true } | emit_Key_Fingerprints
     print '```'
     print
     return $Exit_Status_Success

@@ -29,6 +29,10 @@ jobs:
       - name: Run verifier regression tests
         run: zsh .repo/scripts/tests/TEST-verify_commit_signatures.sh
 
+      - name: Run bootstrap and merge regression tests
+        if: hashFiles('.repo/scripts/tests/TEST-bootstrap_oi_repo.sh') != ''
+        run: zsh .repo/scripts/tests/TEST-bootstrap_oi_repo.sh
+
       # On main, and on staging/* branches holding the commit about to be
       # fast-forwarded onto main, the checked-out history is the protected
       # chain. Everywhere else, main's rules apply to origin/main.

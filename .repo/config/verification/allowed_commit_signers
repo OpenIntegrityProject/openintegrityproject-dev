@@ -8,3 +8,7 @@
 # Claude Code on the web (Anthropic-held key; scope and rotation unconfirmed)
 # SHA256:32dP45eSMmVSt/G/CGvcxl/P+MO3Nwj9xeTh/GSA2wc
 @claude-code-web namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKy87HxSEheG8vEPhSs9u2KZCtVErAQfpmprtUJCZ2w7
+
+# Christopher Allen, chryseikori Secure Enclave (Touch ID), created 2026-05-07
+# SHA256:Vzkl4/K78dc1t9UkNOKex3ZUuW62u/Z0DVBKmLyD5fM
+@ChristopherA/chryseikori-se namespaces="git" sk-ecdsa-sha2-nistp256@openssh.com AAAAInNrLWVjZHNhLXNoYTItbmlzdHAyNTZAb3BlbnNzaC5jb20AAAAIbmlzdHAyNTYAAABBBI2g1KU43cEF3/7vU0CTe5lStJx1EKjpK19jr6fLetqRi0nEiY/vZvEN8PVg9XFLxlHvw/NhFWr3869U72SUQboAAAAEc3NoOg==

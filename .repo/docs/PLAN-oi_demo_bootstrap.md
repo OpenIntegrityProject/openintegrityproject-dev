@@ -1,5 +1,5 @@
 # Plan: Bootstrapping the `oi-demo` Repository
-> - _Updated: 2026-10-02 by Christopher Allen <ChristopherA@LifeWithAlacrity.com>_
+> - _Updated: 2026-10-03 by Christopher Allen <ChristopherA@LifeWithAlacrity.com>_
 
 `OpenIntegrityProject/oi-demo` will be a public demonstration of an Open Integrity repository in which humans and Claude Code agents work under signing rules recorded in the repository itself. A local script does only the steps that need the human's Secure Enclave key or admin rights. Everything after that arrives as Claude pull requests, which the human approves by signing the merge with Touch ID.
 
@@ -19,7 +19,7 @@
 - [x] `.repo/scripts/merge_pr.sh`: verify the PR's commits, show them, merge with Touch ID, push to `staging/main`, wait for `verify`, move `main`.
 - [x] `.repo/scripts/tests/TEST-bootstrap_oi_repo.sh`: runs both scripts end to end with throwaway keys, a local bare repository standing in for GitHub, and a stub `gh`.
 
-Not testable outside macOS, and so first exercised in Phase 1: creating the agent key with `sc_auth` and reading its public key from `ssh-add -L`.
+Not testable outside macOS, and so first exercised in Phase 1: creating the agent key. The first real run showed that `sc_auth` creates no SSH key handle (finding F8); the key was finished by hand with `ssh-keygen -K` and `ssh-add -S`, and `--create-agent-key` now does the same (910b824).
 
 ## Phase 1: Run on chryseikori (Christopher)
 
@@ -47,6 +47,8 @@ It then verifies the result, creates the public GitHub repository, pushes `main`
 
 **Manual step:** install the Claude GitHub App on `oi-demo`: <https://github.com/apps/claude/installations/select_target>.
 
+**Status (2026-10-03):** done. `oi-demo` was created with seven commits signed by chryseikori's Secure Enclave key, all verified; CI passed and both rulesets are active; the Claude GitHub App is installed.
+
 ## Phase 2: Each Other Device (Christopher)
 
 On seshat and athena: clone `oi-demo`, set `user.signingkey` to that device's Secure Enclave key, and make one small signed commit through a PR. This proves the device holds the key approved in commit 3.
@@ -59,8 +61,8 @@ On seshat and athena: clone `oi-demo`, set `user.signingkey` to that device's Se
 
 Each is merged with `merge_pr.sh <number>`.
 
+**Status (2026-10-03):** step 1 is `oi-demo` PR #1 (deny rules, zsh hook, a push guard), with commits from both cloud and local Claude that all verify. Review follow-ups are `oi-demo` issues #3 (deny `gh auth token`, fixed on the PR branch), #4 (shrink the push guard), and #5 (record that the cloud key is shared across sessions).
+
 ## Open Items
 
-- ~~Whether the agent key appears in `ssh-add -L` after `sc_auth create-ctk-identity -t none`.~~ Resolved by the Phase 1 run: `@claude-local/chryseikori` (`ECDSA-SK SHA256:XpjMQMMYvptZM4/VAeiJ5kZh3UisLfodEMHoWmfSwgQ`) is registered in `oi-demo`, and commits it signed there verify (`c76b504`, 2026-10-02).
-- The Secure Enclave identities expire after one year (F5); plan rotation.
-- Verifier requirement for proof of possession (Phase 2) before a new device key may sign `main`.
+Tracked as requirements: rotation (K3), proof of possession (K4), and revocation (K5) in [REQUIREMENTS-merge_and_bootstrap.md](REQUIREMENTS-merge_and_bootstrap.md); agent credentials (A2) in [REQUIREMENTS-agent_sessions.md](REQUIREMENTS-agent_sessions.md).

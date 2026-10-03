@@ -93,4 +93,4 @@ Posted to the PR, lightly condensed:
 
 ## Round 3 Verification: Not Completed
 
-A verification of round 3 was started twice in the cloud session and stopped each time by its safety classifier, once while writing a probe harness and once during a read-only review of the guard. The work was reassigned to the local reviewer, then superseded by the decision to replace the guard (PRD E1 to E5). No round 3 verification results exist.
+A verification of round 3 was started twice in the cloud session and stopped each time by its safety classifier, once while writing a probe harness and once during a read-only review of the guard. The work was reassigned to the local reviewer, then superseded by the decision to replace the guard (PRD EN1 to EN5). No round 3 verification results exist.

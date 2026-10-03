@@ -53,7 +53,7 @@ On seshat and athena: clone `oi-demo`, set `user.signingkey` to that device's Se
 
 ## Phase 3: Claude Pull Requests (Claude, cloud or local)
 
-1. `.claude/settings.json` shared by local and cloud sessions: permissions to run the verifier and tests, and a SessionStart hook that installs zsh in cloud sessions.
+1. `.claude/settings.json` shared by local and cloud sessions: permissions to run the verifier and tests, and a SessionStart hook that installs zsh in cloud sessions. Attempted in `oi-demo` PR #1 and superseded by the [workflow PRD](PRD-human_agent_workflow.md); the reusable parts are in [`.repo/templates/oi-repo/.claude/`](../templates/oi-repo/.claude/) and the review record is in [RECORD-oi_demo_pr1_reviews.md](RECORD-oi_demo_pr1_reviews.md).
 2. README badges and a "Verify in your browser" link.
 3. In-browser verifier on GitHub Pages.
 
@@ -61,6 +61,6 @@ Each is merged with `merge_pr.sh <number>`.
 
 ## Open Items
 
-- Whether the agent key appears in `ssh-add -L` after `sc_auth create-ctk-identity -t none`, as the human keys do. If not, `--create-agent-key` stops and explains how to pass `--agent-key`.
+- ~~Whether the agent key appears in `ssh-add -L` after `sc_auth create-ctk-identity -t none`.~~ Resolved by the Phase 1 run: `@claude-local/chryseikori` (`ECDSA-SK SHA256:XpjMQMMYvptZM4/VAeiJ5kZh3UisLfodEMHoWmfSwgQ`) is registered in `oi-demo`, and commits it signed there verify (`c76b504`, 2026-10-02).
 - The Secure Enclave identities expire after one year (F5); plan rotation.
 - Verifier requirement for proof of possession (Phase 2) before a new device key may sign `main`.

@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-BSD_2--Clause--Patent-blue.svg)](https://spdx.org/licenses/BSD-2-Clause-Patent.html)
 [![Project Status: WIP](https://www.repostatus.org/badges/latest/wip.svg)](https://www.repostatus.org/#wip)
 
-This document defines how a human and Claude Code agents, local and cloud, work together in an Open Integrity repository: who does what, on which branch, how they hand work to each other, how `main` records what each pull request did, and what enforces the rules. It replaces the ad hoc process used for `oi-demo` PR #1, whose lessons are recorded at the end.
+This document defines how a human and Claude Code agents, local and cloud, work together in an Open Integrity repository: who does what, on which branch, how they hand work to each other, how `main` records what each pull request did, and what enforces the rules. It replaces the ad hoc process used for `oi-demo` PR #1, whose lessons are recorded at the end and whose reviews are kept in [RECORD-oi_demo_pr1_reviews.md](RECORD-oi_demo_pr1_reviews.md).
 
 It builds on the [verifier requirements](REQUIREMENTS-verify_commit_signatures.md) (trust model, rules R1 to R7, the staging flow) and the [`oi-demo` bootstrap plan](PLAN-oi_demo_bootstrap.md) (keys and signers). Nothing here changes those rules.
 
@@ -141,6 +141,19 @@ The server already stops the worst case. R4 requires a human Secure Enclave sign
 - **A3** Agents never merge. Only the human runs `merge_pr.sh`, on a device holding a Secure Enclave key.
 - **A4** Either kind of agent may hold either agent role. The human picks per pull request.
 
+## Environment Findings Shape the Setup
+
+Established while building `oi-demo` PR #1 on 2026-10-02:
+
+- **EF1 The cloud image lacks `zsh` and `ssh-keygen`.** The verifier needs both. A SessionStart hook installs `zsh`; `openssh-client` belongs in the environment setup script (A2).
+- **EF2 `apt-get install zsh` hangs in the cloud image.** A pre-existing `/etc/zsh/zshrc` triggers a dpkg config-file prompt, and dpkg waits on stdin. The template hook passes `--force-confdef --force-confold`, reads stdin from `/dev/null`, uses `sudo -n`, and always exits 0 with a warning on stdout.
+- **EF3 A restart to pick up settings costs the session its memory.** In the cloud session, a PreToolUse hook added to `.claude/settings.json` took effect on the next tool call. The local sessions were restarted after each settings change to be sure, and each restarted session had no memory of the previous one. This is why G4 puts the state on the pull request.
+- **EF4 Bash deny rules match command text.** They are not a security boundary (Claude Code permissions documentation). A path rule anchors to the project root only with a leading `/`; a bare path is relative to the session's working directory. A deny rule wins over an allow at every settings level.
+- **EF5 `gh pr view` does not work in cloud sessions**, which cannot reach GitHub's GraphQL API, and `gh api` is on the template deny list. Sessions read pull requests through the GitHub tools instead.
+- **EF6 Writing evasion probes trips the cloud safety classifier.** Three attempts to test or review the push guard were stopped. This supports E5.
+
+The templates are in [`.repo/templates/oi-repo/.claude/`](../templates/oi-repo/.claude/): `settings.json` (the E4 deny list and the SessionStart hook) and `hooks/install-zsh.sh`.
+
 ## Lessons from `oi-demo` PR #1
 
 | Observation | Requirement |
@@ -152,7 +165,7 @@ The server already stops the worst case. R4 requires a human Secure Enclave sign
 | Testing that guard tripped the cloud safety classifier | E5 |
 | Merge commits recorded only a title | M1 to M5 |
 | Session-named branches meant nothing in `main` | B4 |
-| `gh api` was denied by the PR's own rules, blocking a session from reading PR comments | Reviewer sessions read PRs through the GitHub tools; E4 keeps the deny list short |
+| `gh api` was denied by the PR's own rules, and `gh pr view` needs GraphQL, which cloud sessions can't reach, so a session could not read PR comments with `gh` | Sessions read PRs through the GitHub tools (EF5) |
 
 ## Rollout
 
@@ -173,12 +186,12 @@ The server already stops the worst case. R4 requires a human Secure Enclave sign
 ### Phase 3: Protocol in the Repository (Claude)
 
 - [ ] `CLAUDE.md` text for A1, and the status comment template (C1 to C3).
-- [ ] Reduce `.claude/settings.json` to E4.
+- [ ] Add `bootstrap_oi_repo.sh` support for copying the templates in `.repo/templates/oi-repo/` into a new repository.
 
 ### Phase 4: Apply to `oi-demo` (Claude, then Christopher)
 
-- [ ] Close `oi-demo` PR #1 with a link to this document, keeping its review comments as the record.
-- [ ] Open a new PR on a topic branch with the deny list, the zsh SessionStart hook, and the `CLAUDE.md` protocol.
+- [ ] Close `oi-demo` PR #1 with a link to this document. Its review comments are captured in [RECORD-oi_demo_pr1_reviews.md](RECORD-oi_demo_pr1_reviews.md), and its push guard in [`.repo/archive/guard-git-push/`](../archive/guard-git-push/).
+- [ ] Open a new PR on a topic branch with the templates from `.repo/templates/oi-repo/.claude/` and the `CLAUDE.md` protocol.
 
 ## Open Questions
 

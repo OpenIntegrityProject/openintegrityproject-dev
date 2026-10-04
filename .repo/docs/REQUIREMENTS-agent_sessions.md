@@ -28,7 +28,7 @@ The asymmetry matters: a cloud session cannot touch repository settings, but a l
   - `gh api`, `gh repo edit|delete|rename|archive`, `gh ruleset`, `gh secret set|delete`, `gh variable set|delete`, `gh release delete`;
   - `gh auth token` and `gh auth status --show-token|-t`, since the token reaches every admin action through the REST API;
   - `gh pr merge` and `merge_pr.sh`, which are the human's steps (M3, M4).
-- **A4 Push guard.** *(Recommended)* A short PreToolUse hook may block `git push` text that names `main`, `staging/`, or force options, failing closed if it cannot run. It must stay small: a full shell parser is an arms race that guards against harm A1 already prevents (see `oi-demo` issue #4).
+- **A4 Push guard.** *(Recommended)* A short PreToolUse hook may block `git push` text that names `main`, `staging/`, or force options, failing closed if it cannot run. It must stay small: a full shell parser is an arms race that guards against harm A1 already prevents (see `oi-demo` issue #4). Whether to keep any guard is open: the [workflow PRD](PRD-human_agent_workflow.md) (EN4) archives the full guard and uses none.
 - **A5 Approval prompts.** *(Required, human)* Deny prompts for anything touching repository settings, and treat an unexpected Touch ID prompt during an agent session as an attempt to use a human key.
 
 ## Session Setup

@@ -55,7 +55,7 @@ On seshat and athena: clone `oi-demo`, set `user.signingkey` to that device's Se
 
 ## Phase 3: Claude Pull Requests (Claude, cloud or local)
 
-1. `.claude/settings.json` shared by local and cloud sessions: permissions to run the verifier and tests, and a SessionStart hook that installs zsh in cloud sessions.
+1. `.claude/settings.json` shared by local and cloud sessions: permissions to run the verifier and tests, and a SessionStart hook that installs zsh in cloud sessions. Attempted in `oi-demo` PR #1 and superseded by the [workflow PRD](PRD-human_agent_workflow.md); the reusable parts are in [`.repo/templates/oi-repo/.claude/`](../templates/oi-repo/.claude/) and the review record is in [RECORD-oi_demo_pr1_reviews.md](RECORD-oi_demo_pr1_reviews.md).
 2. README badges and a "Verify in your browser" link.
 3. In-browser verifier on GitHub Pages.
 

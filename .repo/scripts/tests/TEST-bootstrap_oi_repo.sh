@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 ########################################################################
 ## Script:        TEST-bootstrap_oi_repo.sh
-## Version:       0.1.00 (2026-10-02)
+## Version:       0.1.01 (2026-10-03)
 ## Origin:        https://github.com/OpenIntegrityProject/openintegrityproject-dev/blob/main/.repo/scripts/tests/TEST-bootstrap_oi_repo.sh
 ## Description:   Regression tests for bootstrap_oi_repo.sh and
 ##                merge_pr.sh. Uses throwaway software keys in an
@@ -277,8 +277,18 @@ main() {
 [gpg \"ssh\"]
     program = ssh-keygen" > "$Test_Root/gitconfig"
     export GIT_CONFIG_GLOBAL="$Test_Root/gitconfig" GIT_CONFIG_NOSYSTEM=1 TEST_ROOT="$Test_Root"
+    # The scripts under test run in child zsh processes. Point ZDOTDIR at
+    # the empty test root so they skip the user's ~/.zshenv, which may
+    # prepend directories (such as /opt/homebrew/bin) ahead of the stub.
+    export ZDOTDIR="$Test_Root"
     export PATH="$Test_Root/bin:$PATH"
     write_Gh_Stub
+    # Never reach real GitHub: stop unless a child zsh finds the stub
+    [[ "$(zsh -c 'command -v gh')" == "$Test_Root/bin/gh" ]] || {
+        print -u2 -- "Error: a child zsh does not resolve gh to the stub in $Test_Root/bin; not running tests"
+        rm -rf -- "$Test_Root"
+        return $Exit_Status_General
+    }
 
     typeset -gx SSH_AUTH_SOCK SSH_AGENT_PID
     eval "$(ssh-agent -s)" >/dev/null

@@ -63,15 +63,16 @@ All four arrive at once, and all four land on the same small maintainer teams.
 
 ---
 
-## Open Integrity, Briefly
+## Git's Trust Gap
 
-* A Git repository as a **cryptographic root of trust**
-* A signed, empty **inception commit** anchors where it began
-* **Signers files** in the repository say who may sign what
-* Anyone can **verify from any clone**, without trusting the host
+* Author and committer names are **unverified text**: anyone can claim to be anyone
+* Signing is **optional**, and unsigned work merges silently
+* History can be **rewritten**, including the very first commit
+* Nothing ties a clone to **who started the repository**
+* Trust lives in the **hosting platform's** accounts and settings, not in the repository
 
 Note:
-Blockchain Commons' earlier work. The page is developer.blockchaincommons.com/open-integrity, and the code is in the OpenIntegrityProject organization on GitHub.
+Open Integrity is Blockchain Commons' answer to these gaps, using only what Git already has: SSH signing, which Git has supported since version 2.34, and ordinary files in the repository. No changes to Git.
 
 ----
 
@@ -82,6 +83,85 @@ Blockchain Commons' earlier work. The page is developer.blockchaincommons.com/op
 * Tamper detection
 * Trust delegation from the inception key
 * Platform-agnostic validation: GitHub, GitLab, self-hosted
+
+From developer.blockchaincommons.com/open-integrity
+
+---
+
+## The Inception Commit: A Root of Trust
+
+* The repository's **first commit is empty**: no files at all
+* It is **signed** with the founder's SSH key
+* Its committer name **is that key's fingerprint**
+* Its message states the rules: **who may add signers, and how**
+
+The repository's identity is now bound to a key, and a forged or rewritten origin no longer verifies.
+
+Note:
+Why empty: Git identifies commits with SHA-1, which has known weaknesses. An empty commit has a fixed, predictable tree, which leaves an attacker almost nothing to work with, and the SSH signature on top carries far more strength than SHA-1.
+
+----
+
+### ANNOTATION: A Real Inception Commit
+
+From the Open Integrity development repository, commit `7af720f`:
+
+```text
+committer  SHA256:a61TkTtLFGEYOmdRMbpYGkZwXw2QUrGkAWp3dok8jcw
+tree       4b825dc (Git's empty tree)
+
+Initialize repository and establish a SHA-1 root of trust
+
+This key also certifies future commits' integrity and origin.
+Other keys can be authorized to add additional commits via the
+creation of a ./.repo/config/verification/allowed_commit_signers
+file. This file must initially be signed by this repo's inception
+key ...
+```
+
+Creating one is a single command, and it is the step most projects can take today.
+
+---
+
+## A Chain of Trust
+
+* **Signers files** in the repository list which keys may sign what
+* The inception key **signs the first list**
+* Every later change to a list must be signed by a key **already on it**
+* Each commit is judged by the list **as of its parent**, so no key can authorize itself
+* Keys can be **added, rotated, limited by date, and given roles**
+
+Note:
+This is delegation without a central authority. The history of the signers files is itself a signed, auditable record of who was trusted, when, and by whom.
+
+----
+
+### ANNOTATION: A Signers File
+
+```text
+# Allowed commit signers
+# Changes to this file must be signed by a currently approved signer.
+
+# Christopher Allen (inception key)
+@ChristopherA namespaces="git" ssh-ed25519 AAAAC3Nz...
+
+# Claude Code on the web (agent; working branches only)
+@claude-code-web namespaces="git" ssh-ed25519 AAAAC3Nz...
+```
+
+This is OpenSSH's standard `allowed_signers` format, so `git` and `ssh-keygen` read it directly. Separate files can grant separate roles: commits, the main branch, release tags.
+
+---
+
+## Verify From Anywhere
+
+* Clone from GitHub, a mirror, a USB stick: **it does not matter**
+* The verifier needs only **Git, `ssh-keygen`, and the repository itself**
+* It walks the history from the inception commit and checks every signature against the signers files **in force at the time**
+* GitHub's green "Verified" badge is a **different check**: it asks whether a key belongs to a GitHub account, not whether the repository authorized it
+
+Note:
+This is the heart of platform independence. The host can enforce rules, but it never decides what is valid.
 
 ---
 

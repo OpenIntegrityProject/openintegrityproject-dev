@@ -48,3 +48,5 @@ The asymmetry matters: a cloud session cannot touch repository settings, but a l
 ## Status in This Repository
 
 This repository adopts A3, A6, A7, and A9 in `.claude/settings.json`, `CLAUDE.md`, and `.gitignore`. It does not yet have a local agent key (A8) or a push guard (A4), and A2 is open.
+
+Because A8 is not met, a local Claude Code session in this repository signs with the human's Secure Enclave key, so its commits are authored and signed as the human. This breaks A13 and is the case A5 warns about: each such commit raises a Touch ID prompt for work the human did not write. It happened on 2026-10-03 for `aa98ea7`, `003701b`, `aa6733b`, `b0d42bb`, `0252edf`, `af0a3e9`, and `7f59a04`, all written by a local Claude Code session and approved one prompt at a time. Until A8 is met, local agent work here should either be committed by a cloud session, which signs as `@claude-code-web`, or say in its pull request that the human key signed agent-written commits.

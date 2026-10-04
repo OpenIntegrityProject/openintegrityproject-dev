@@ -38,6 +38,7 @@ Each requirement is marked *(Required)*, *(Recommended)*, or *(Not yet met)*. Se
 - **M12** *(Required)* `staging/main` is unprotected, overwritten (force-pushed) by each landing, and never merged from. It exists only so `verify` can run on a commit before `main` moves to it.
 - **M13** *(Not yet met)* Two landings must not race: the second must notice that `staging/main` moved, or that `main` moved under it, and stop. Today a human lands one PR at a time.
 - **M14** *(Recommended)* Who may push to `staging/*` is unrestricted. A bad push there cannot reach `main` (the verifier runs `--protected HEAD` on it), but a ruleset limiting `staging/*` to admins would remove the noise.
+- **M16 The ruleset bypass message is expected.** *(Note)* Moving `main` prints `remote: Bypassed rule violations for refs/heads/main: Cannot update this protected ref.` on every landing. It means the human's admin account bypassed the `main` ruleset, which is how `merge_pr.sh` moves `main`; it is not a failure. It also means landing depends on admin credentials, which is part of why A2 in [REQUIREMENTS-agent_sessions.md](REQUIREMENTS-agent_sessions.md) matters.
 
 ### Branch Ownership
 
@@ -56,11 +57,12 @@ Each requirement is marked *(Required)*, *(Recommended)*, or *(Not yet met)*. Se
 - **B9 Protect `main` immediately.** *(Required)* After the first push, create both rulesets from the verifier requirements. The repository must be public, or on a paid plan, for rulesets to apply.
 - **B10 Local agent signing config stays local.** *(Required)* `.claude/settings.local.json` sets the agent's signing key for Claude Code's processes only and is Git-ignored.
 - **B11** *(Not yet met)* Run `core`'s `audit_inception_commit-POC.sh` on the new repository as a final step, once compatibility is confirmed (see the verifier requirements' open questions).
+- **B12 Tests never reach GitHub.** *(Required)* `TEST-bootstrap_oi_repo.sh` runs the scripts in child zsh processes with a stub `gh`. It sets `ZDOTDIR` to its test root so the user's `~/.zshenv` cannot put the real `gh` ahead of the stub, and refuses to run any test unless a child zsh resolves `gh` to the stub. *(Learned: on a Mac whose `~/.zshenv` prepends `/opt/homebrew/bin`, the test called real GitHub and tried to create `test/oi-demo`.)*
 
 ## Key Lifecycle
 
 - **K1 Key file locations.** *(Required)* Public keys live in one directory per machine (`~/.keys` on chryseikori); Secure Enclave stubs live in `~/.ssh` with mode 600. Each repository's `user.signingkey` names the `.pub` file, so moving it breaks signing until every repository's setting is updated. *(Learned on 2026-10-02.)*
-- **K2 Agent availability after reboot.** *(Required)* Human and agent stubs must be re-added with `ssh-add -S` after logout or reboot; before handing work to local Claude Code, check that `ssh-add -L` lists its key.
+- **K2 Agent availability after reboot.** *(Required)* Human and agent stubs must be re-added with `ssh-add -S` after logout or reboot; before handing work to local Claude Code, check that `ssh-add -L` lists its key. Before any step that signs with a human key, confirm someone is at the Mac: an unanswered Touch ID prompt yields an invalid commit rather than an error (F10).
 - **K3 Rotation.** *(Not yet met)* Secure Enclave identities carry one-year validity: chryseikori 2027-05-07, athena 2027-04-16, seshat 2027-03-21, local agent 2027-10-02 (F5). A rotation ceremony is needed: create the new key, approve it in all three signers files in a commit signed by a current main signer, prove possession with one commit from the new key, then remove or `valid-before`-limit the old key. Set `valid-before` on each entry to its identity's expiry.
 - **K4 Proof of possession.** *(Not yet met)* A newly approved device key should make one commit before it may sign `main` or tags. The verifier does not yet enforce this.
 - **K5 Revocation.** *(Not yet met)* Removing a key stops future commits but leaves its past commits valid. Define whether a compromised key needs a dated revocation that also invalidates earlier commits after a given time.
